@@ -15,7 +15,11 @@ def send_email_notification(
     sender_name: str,
     sender_email: str,
     subject: Optional[str],
-    message: str
+    message: str,
+    smtp_sender_email: Optional[str] = None,
+    smtp_sender_password: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None
 ) -> bool:
     """
     Send email notification to admin emails when a new contact message is received
@@ -26,21 +30,29 @@ def send_email_notification(
         sender_email: Email of the person who sent the contact message
         subject: Subject of the contact message
         message: Message content
+        smtp_sender_email: SMTP sender email (from database, optional)
+        smtp_sender_password: SMTP sender password (from database, optional)
+        smtp_host: SMTP host (from database, optional)
+        smtp_port: SMTP port (from database, optional)
     
     Returns:
         bool: True if email was sent successfully, False otherwise
     """
     try:
-        # Get SMTP settings from environment variables
+        # Check if SMTP is enabled - allow database settings to enable it even if env var is not set
+        # If database settings are provided, assume SMTP is enabled
         smtp_enabled = os.getenv("SMTP_ENABLED", "false").lower() == "true"
-        if not smtp_enabled:
-            logger.info("SMTP is disabled in environment variables. Skipping email notification.")
+        has_database_smtp = smtp_sender_email and smtp_sender_password
+        
+        if not smtp_enabled and not has_database_smtp:
+            logger.info("SMTP is disabled and no database SMTP settings provided. Skipping email notification.")
             return False
         
-        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        smtp_username = os.getenv("SMTP_USERNAME")
-        smtp_password = os.getenv("SMTP_PASSWORD")
+        # Use database settings if provided, otherwise fallback to environment variables
+        smtp_server = smtp_host or os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port_value = smtp_port or int(os.getenv("SMTP_PORT", "587"))
+        smtp_username = smtp_sender_email or os.getenv("SMTP_USERNAME")
+        smtp_password = smtp_sender_password or os.getenv("SMTP_PASSWORD")
         
         if not admin_emails or not smtp_username or not smtp_password:
             logger.warning("Email configuration incomplete. Skipping email notification.")
@@ -76,7 +88,7 @@ This is an automated notification from your website contact form.
         
         # Send email using SMTP
         try:
-            server = smtplib.SMTP(smtp_server, smtp_port)
+            server = smtplib.SMTP(smtp_server, smtp_port_value)
             server.starttls()  # Enable TLS encryption
             server.login(smtp_username, smtp_password)
             server.send_message(msg)

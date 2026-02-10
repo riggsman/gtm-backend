@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: backend-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-tgmi}
+      POSTGRES_USER: ${DB_USER:-tgmi}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tgmiadmin}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tgmi} -d ${DB_NAME:-tgmi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend-network
+
+  # Backend Application Service
+  backend:
+    image: ${IMAGE_NAME:-backend-app}:${IMAGE_TAG:-latest}
+    container_name: backend-app
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      # Override DB_HOST to use service name
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_TYPE: postgresql
+      ENVIRONMENT: production
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - backend-network
+
+volumes:
+  db_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  backend-network:
+    driver: bridge
